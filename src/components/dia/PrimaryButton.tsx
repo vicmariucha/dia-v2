@@ -10,7 +10,7 @@ export const PrimaryButton = ({ children, className, ...props }: PrimaryButtonPr
   return (
     <button
       className={cn(
-        "w-full gradient-primary text-white font-medium py-3.5 px-6 rounded-[32px]",
+        "w-full gradient-primary text-white font-medium py-3.5 px-6 rounded-[32px] font-poppins",
         "shadow-soft hover:shadow-elevated transition-smooth",
         "disabled:opacity-50 disabled:cursor-not-allowed",
         className

@@ -11,7 +11,7 @@ export const OutlineButton = ({ children, icon, className, ...props }: OutlineBu
   return (
     <button
       className={cn(
-        "w-full bg-card text-accent font-medium py-3.5 px-6 rounded-[32px]",
+        "w-full bg-card text-accent font-medium py-3.5 px-6 rounded-[32px] font-poppins",
         "border-2 border-accent shadow-soft hover:shadow-elevated transition-smooth",
         "flex items-center justify-center gap-2",
         "disabled:opacity-50 disabled:cursor-not-allowed",
@@ -19,8 +19,8 @@ export const OutlineButton = ({ children, icon, className, ...props }: OutlineBu
       )}
       {...props}
     >
-      {icon}
-      {children}
+      {icon && <span className="shrink-0">{icon}</span>}
+      <span>{children}</span>
     </button>
   );
 };

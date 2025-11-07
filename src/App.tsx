@@ -18,6 +18,13 @@ import InsulinForm from "./pages/InsulinForm";
 import MealForm from "./pages/MealForm";
 import ActivityForm from "./pages/ActivityForm";
 import NotFound from "./pages/NotFound";
+import DoctorDashboard from "./pages/doctor/Dashboard";
+import DoctorPatient from "./pages/doctor/Patient";
+import Perfil from "./pages/Perfil";
+import MyDoctor from "./pages/MyDoctor";
+import DoctorDetail from "./pages/DoctorDetail";
+import DoctorChat from "./pages/DoctorChat";
+import History from "./pages/History";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +50,13 @@ const App = () => (
           <Route path="/insulin-form" element={<InsulinForm />} />
           <Route path="/meal-form" element={<MealForm />} />
           <Route path="/activity-form" element={<ActivityForm />} />
+          <Route path="/doctor" element={<DoctorDashboard />} />
+          <Route path="/doctor/patient/:id" element={<DoctorPatient />} />
+          <Route path="/perfil" element={<Perfil />} />
+          <Route path="/my-doctor" element={<MyDoctor />} />
+          <Route path="/doctor/:id" element={<DoctorDetail />} />
+          <Route path="/chat/:id" element={<DoctorChat />} />
+          <Route path="/history" element={<History />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
