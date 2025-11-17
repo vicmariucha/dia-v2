@@ -17,7 +17,7 @@ export class GlucoseMeasurement {
   @Column('int')
   value: number;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamp' })
   measuredAt: Date;
 
   @Column({ type: 'varchar', length: 50 })

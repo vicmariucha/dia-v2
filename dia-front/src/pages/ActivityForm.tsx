@@ -6,9 +6,12 @@ import { AppTextField } from "@/components/dia/AppTextField";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { BottomNav } from "@/components/dia/BottomNav";
 import { toast } from "sonner";
-
+import { createActivity } from "@/lib/api";
+import { useAuthUser } from "@/hooks/useAuthUser";
+const intensityLevels = ["Leve", "Moderada", "Intensa"];
 const ActivityForm = () => {
   const navigate = useNavigate();
+    const user = useAuthUser();
   const [formData, setFormData] = useState({
     activityType: "",
     duration: "",
@@ -30,16 +33,46 @@ const ActivityForm = () => {
     "Outro",
   ];
 
-  const intensityLevels = ["Baixa", "Moderada", "Alta"];
+  const isValid =
+    formData.activityType &&
+    formData.duration &&
+    formData.intensity &&
+    formData.date &&
+    formData.time;
 
-  const isValid = formData.activityType && formData.duration && formData.intensity;
+  const handleSave = async () => {
+    if (!isValid) return;
 
-  const handleSave = () => {
-    if (isValid) {
+    if (!user) {
+      toast.error(
+        "Usuário não encontrado. Faça login novamente para registrar a atividade.",
+      );
+      navigate("/login");
+      return;
+    }
+
+    try {
+      const performedAt = new Date(
+        `${formData.date}T${formData.time}:00`,
+      ).toISOString();
+
+      await createActivity({
+        userId: user.id,
+        activityType: formData.activityType,
+        durationMinutes: Number(formData.duration),
+        intensity: formData.intensity,
+        notes: formData.notes || undefined,
+        performedAt,
+      });
+
       toast.success("Atividade salva com sucesso!");
-      setTimeout(() => navigate("/home-patient"), 1500);
+      navigate("/home-patient"); // ajuste para a rota correta da sua home
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || "Erro ao salvar atividade.");
     }
   };
+
 
   return (
     <div className="min-h-screen bg-background pb-24">

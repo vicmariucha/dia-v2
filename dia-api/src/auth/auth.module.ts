@@ -1,28 +1,29 @@
+// src/auth/auth.module.ts
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
-
-import { AuthController } from './auth.controller';
+import { PassportModule } from '@nestjs/passport';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule } from '@nestjs/config';
 import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { JwtStrategy } from './jwt.strategy';
+
 import { UsersModule } from '../users/users.module';
 import { PatientProfile } from '../users/patient-profile.entity';
 
-const EXPIRES_IN_SECONDS = parseInt(process.env.JWT_EXPIRES_IN ?? '86400', 10); 
-// 86400 = 24h
-
 @Module({
   imports: [
-    UsersModule,
+    ConfigModule,
+    UsersModule, 
     TypeOrmModule.forFeature([PatientProfile]),
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'dev-secret',
-      signOptions: {
-        // aqui agora é número (segundos), então o TS para de reclamar
-        expiresIn: EXPIRES_IN_SECONDS,
-      },
+      secret: process.env.JWT_SECRET || 'changeme', // se tiver env, pode trocar depois
+      signOptions: { expiresIn: '7d' },
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, JwtStrategy],
+  exports: [AuthService],
 })
 export class AuthModule {}

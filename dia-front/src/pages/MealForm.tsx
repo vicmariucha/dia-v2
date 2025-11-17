@@ -6,9 +6,16 @@ import { AppTextField } from "@/components/dia/AppTextField";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { BottomNav } from "@/components/dia/BottomNav";
 import { toast } from "sonner";
+import { createMeal } from "@/lib/api";
+import { useAuthUser } from "@/hooks/useAuthUser";
+
 
 const MealForm = () => {
   const navigate = useNavigate();
+  const user = useAuthUser(); // pega o usuário logado (id, email etc.)
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [formData, setFormData] = useState({
     mealType: "",
     carbs: "",
@@ -29,12 +36,43 @@ const MealForm = () => {
     "Ceia",
   ];
 
-  const isValid = formData.mealType && formData.carbs;
+  const isValid =
+    !!user &&
+    !!formData.mealType &&
+    !!formData.carbs &&
+    !!formData.date &&
+    !!formData.time;
 
-  const handleSave = () => {
-    if (isValid) {
+  const handleSave = async () => {
+    if (!user) return;
+    if (!isValid || isSubmitting) return;
+
+    try {
+      setIsSubmitting(true);
+
+      const eatenAtLocal = `${formData.date}T${formData.time}:00`;
+      const eatenAt = new Date(eatenAtLocal).toISOString();
+
+      await createMeal({
+        userId: user.id,
+        mealType: formData.mealType,
+        carbs: Number(formData.carbs),
+        protein: formData.protein
+          ? Number(formData.protein)
+          : undefined,
+        fat: formData.fat ? Number(formData.fat) : undefined,
+        sugar: formData.sugar ? Number(formData.sugar) : undefined,
+        eatenAt,
+        notes: formData.notes || undefined,
+      });
+
       toast.success("Alimentação salva com sucesso!");
-      setTimeout(() => navigate("/home-patient"), 1500);
+      navigate("/home-patient");
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao salvar alimentação. Tente novamente.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -184,13 +222,14 @@ const MealForm = () => {
               </div>
             </div>
 
-            <PrimaryButton
-              onClick={handleSave}
-              disabled={!isValid}
-              className="mt-6"
-            >
-              Salvar alimentação
-            </PrimaryButton>
+           <PrimaryButton
+  onClick={handleSave}
+  disabled={!isValid || isSubmitting}
+  className="mt-6"
+>
+  {isSubmitting ? "Salvando..." : "Salvar alimentação"}
+</PrimaryButton>
+
           </div>
         </InfoCard>
       </div>

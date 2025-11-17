@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Syringe, Calendar, Clock } from "lucide-react";
 import { PrimaryButton } from "@/components/dia/PrimaryButton";
@@ -6,6 +6,7 @@ import { AppTextField } from "@/components/dia/AppTextField";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { BottomNav } from "@/components/dia/BottomNav";
 import { toast } from "sonner";
+import { createInsulin } from "../lib/api";
 
 const InsulinForm = () => {
   const navigate = useNavigate();
@@ -18,18 +19,57 @@ const InsulinForm = () => {
     time: new Date().toTimeString().slice(0, 5),
   });
 
+  // pega userId do localStorage
+  const userId = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      return parsed?.id ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const insulinTypes = ["Basal", "Bolus"];
   const insulinOptions = {
     Basal: ["NPH", "Glargina", "Detemir", "Degludec"],
     Bolus: ["Regular", "Lispro", "Aspart", "Glulisina"],
   };
 
-  const isValid = formData.insulinType && formData.insulin && formData.dose;
+  const isValid =
+    formData.insulinType && formData.insulin && formData.dose;
 
-  const handleSave = () => {
-    if (isValid) {
+  const handleSave = async () => {
+    if (!isValid) return;
+
+    if (!userId) {
+      toast.error(
+        "Usuário não encontrado. Faça login novamente para registrar a insulina.",
+      );
+      return;
+    }
+
+    try {
+      const appliedAt = new Date(
+        `${formData.date}T${formData.time}:00`,
+      ).toISOString();
+
+      const type = formData.insulinType === "Basal" ? "BASAL" : "BOLUS";
+
+      await createInsulin({
+        userId,
+        units: Number(formData.dose),
+        type,
+        appliedAt,
+        notes: formData.notes || undefined,
+      });
+
       toast.success("Insulina salva com sucesso!");
       setTimeout(() => navigate("/home-patient"), 1500);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || "Erro ao salvar insulina");
     }
   };
 
@@ -44,7 +84,9 @@ const InsulinForm = () => {
           >
             <ArrowLeft size={24} />
           </button>
-          <h1 className="text-xl font-semibold text-foreground">Insulina</h1>
+          <h1 className="text-xl font-semibold text-foreground">
+            Insulina
+          </h1>
         </div>
       </div>
 
@@ -53,12 +95,17 @@ const InsulinForm = () => {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Tipo de insulina <span className="text-destructive">*</span>
+                Tipo de insulina{" "}
+                <span className="text-destructive">*</span>
               </label>
               <select
                 value={formData.insulinType}
                 onChange={(e) =>
-                  setFormData({ ...formData, insulinType: e.target.value, insulin: "" })
+                  setFormData({
+                    ...formData,
+                    insulinType: e.target.value,
+                    insulin: "",
+                  })
                 }
                 className="w-full bg-card border border-border rounded-3xl py-3.5 px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
               >
@@ -79,12 +126,17 @@ const InsulinForm = () => {
                 <select
                   value={formData.insulin}
                   onChange={(e) =>
-                    setFormData({ ...formData, insulin: e.target.value })
+                    setFormData({
+                      ...formData,
+                      insulin: e.target.value,
+                    })
                   }
                   className="w-full bg-card border border-border rounded-3xl py-3.5 px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
                 >
                   <option value="">Selecione...</option>
-                  {insulinOptions[formData.insulinType as keyof typeof insulinOptions]?.map((insulin) => (
+                  {insulinOptions[
+                    formData.insulinType as keyof typeof insulinOptions
+                  ]?.map((insulin) => (
                     <option key={insulin} value={insulin}>
                       {insulin}
                     </option>
@@ -106,7 +158,9 @@ const InsulinForm = () => {
                   setFormData({ ...formData, dose: e.target.value })
                 }
               />
-              <p className="text-xs text-muted-foreground mt-1">Em unidades (u)</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Em unidades (u)
+              </p>
             </div>
 
             <div>

@@ -1,9 +1,8 @@
-// dia-front/src/pages/??? (HomePatient/tab histórico resumido)
-import { useEffect, useState } from "react";
+// dia-front/src/pages/HomePatient.tsx
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp,
-  Activity,
   Clock,
   Droplet,
   UtensilsCrossed,
@@ -11,8 +10,16 @@ import {
 } from "lucide-react";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { BottomNav } from "@/components/dia/BottomNav";
-import { useAuthUser } from "@/hooks/useAuthUser";
-import { listGlucose, type GlucoseMeasurement } from "@/lib/api";
+import {
+  listGlucose,
+  listInsulin,
+  GlucoseMeasurement,
+  InsulinDose,
+  Meal,
+  listMeals,
+  listActivities,
+  Activity as ActivityRecord,
+} from "../lib/api";
 
 type TabId = "glucose" | "insulin" | "food" | "activity";
 
@@ -48,7 +55,8 @@ function Sparkline24h({
   const scaleY = (v: number) =>
     padY + H - ((v - yMin) / (yMax - yMin || 1)) * H;
 
-  const scaleX = (i: number) => axisW + padX + (i * W) / (values.length - 1);
+  const scaleX = (i: number) =>
+    axisW + padX + (i * W) / (values.length - 1);
 
   const points = values.map((v, i) => [scaleX(i), scaleY(v)] as const);
 
@@ -80,7 +88,15 @@ function Sparkline24h({
       >
         {ticks.map((t, i) => {
           const y = scaleY(t);
-          return <line key={i} x1={axisW} x2={width - padX} y1={y} y2={y} />;
+          return (
+            <line
+              key={i}
+              x1={axisW}
+              x2={width - padX}
+              y1={y}
+              y2={y}
+            />
+          );
         })}
       </g>
 
@@ -90,7 +106,12 @@ function Sparkline24h({
         stroke="currentColor"
         strokeWidth={1}
       >
-        <line x1={axisW} x2={axisW} y1={padY} y2={padY + H} />
+        <line
+          x1={axisW}
+          x2={axisW}
+          y1={padY}
+          y2={padY + H}
+        />
       </g>
 
       <g className="text-muted-foreground" fontSize="10">
@@ -137,22 +158,39 @@ function Sparkline24h({
   );
 }
 
-type GlucoseCard = {
+type InsulinListItem = {
+  units: number;
+  type: string;
+  time: string;
+};
+
+type GlucoseListItem = {
   value: string;
   context: string;
   date: string;
 };
 
+type FoodListItem = {
+  carbs: number;
+  mealType: string;
+  time: string;
+};
+
+type ActivityListItem = {
+  activityType: string;
+  durationMinutes: number;
+  time: string;
+};
+
 const HomePatient = () => {
   const navigate = useNavigate();
-  const authUser = useAuthUser();
-
   const [activeTab, setActiveTab] = useState<TabId>("glucose");
-
-  const [glucoseCards, setGlucoseCards] = useState<GlucoseCard[]>([]);
-  const [last24hSeries, setLast24hSeries] = useState<number[]>([]);
-  const [meanGlucose, setMeanGlucose] = useState<number | null>(null);
-  const [loadingGlucose, setLoadingGlucose] = useState(true);
+  const [glucoseData, setGlucoseData] = useState<GlucoseMeasurement[]>([]);
+  const [insulinData, setInsulinData] = useState<InsulinListItem[]>([]);
+  const [foodData, setFoodData] = useState<FoodListItem[]>([]);
+  const [activityData, setActivityData] = useState<ActivityListItem[]>([]);
+  const [sparkValues, setSparkValues] = useState<number[]>([]);
+  const [avgGlucose, setAvgGlucose] = useState<number | null>(null);
 
   const tabs: { id: TabId; label: string }[] = [
     { id: "glucose", label: "Glicemia" },
@@ -161,133 +199,168 @@ const HomePatient = () => {
     { id: "activity", label: "Atividade" },
   ];
 
-  // =======================
-  //  CARREGAR DADOS REAIS
-  // =======================
+  // pega userId do localStorage
+  const userId = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      return parsed?.id ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // 🔗 Carregar dados reais do back
   useEffect(() => {
-    if (!authUser) return;
+    if (!userId) return;
 
-    const loadGlucose = async () => {
+    const fetchData = async () => {
       try {
-        const data: GlucoseMeasurement[] = await listGlucose(authUser.id);
+        // pega tudo em paralelo
+        const [glucose, doses, meals, activities] = await Promise.all([
+          listGlucose(userId),
+          listInsulin(userId, 10),
+          listMeals(userId, 10),
+          listActivities(userId, 10),
+        ]);
 
-        // ordenar do mais recente pro mais antigo
-        const ordered = [...data].sort(
+        // ---------- GLICEMIA ----------
+        const sortedGlucose = [...glucose].sort(
           (a, b) =>
             new Date(b.measuredAt).getTime() -
             new Date(a.measuredAt).getTime(),
         );
+        setGlucoseData(sortedGlucose);
 
-        // montar cards (mantendo mesmo layout)
-        const cards: GlucoseCard[] = ordered.map((g) => ({
-          value: `${g.value} mg/dL`,
-          context: g.period,
-          date: new Date(g.measuredAt).toLocaleString("pt-BR", {
-            dateStyle: "short",
-            timeStyle: "short",
-          }),
-        }));
-        setGlucoseCards(cards);
-
-        // série das últimas 24h
-        const now = new Date().getTime();
-        const dayMs = 24 * 60 * 60 * 1000;
-        const last24 = ordered.filter(
-          (g) => now - new Date(g.measuredAt).getTime() <= dayMs,
+        // série e média das últimas 24h
+        const now = Date.now();
+        const last24h = sortedGlucose.filter(
+          (g) =>
+            now - new Date(g.measuredAt).getTime() <=
+            24 * 60 * 60 * 1000,
         );
-
-        const seriesSource =
-          last24.length > 1
-            ? last24
-            : ordered.slice(0, 24); // fallback pra algo aparecer
-
-        setLast24hSeries(seriesSource.map((g) => g.value));
-
-        // média (pode ser das últimas 30 medições, por exemplo)
-        const sample = ordered.slice(0, 30);
-        if (sample.length) {
+        const values = last24h.map((g) => g.value);
+        setSparkValues(values);
+        if (values.length) {
           const avg =
-            sample.reduce((sum, g) => sum + g.value, 0) / sample.length;
-          setMeanGlucose(avg);
+            values.reduce((acc, v) => acc + v, 0) / values.length;
+          setAvgGlucose(avg);
         } else {
-          setMeanGlucose(null);
+          setAvgGlucose(null);
         }
-      } catch (err) {
-        console.error("Erro ao carregar dados de glicemia", err);
-      } finally {
-        setLoadingGlucose(false);
+
+        // ---------- INSULINA ----------
+        const mappedInsulin: InsulinListItem[] = doses
+          .sort(
+            (a, b) =>
+              new Date(b.appliedAt).getTime() -
+              new Date(a.appliedAt).getTime(),
+          )
+          .slice(0, 5)
+          .map((d: InsulinDose) => ({
+            units: d.units,
+            type: d.type === "BASAL" ? "Basal" : "Bolus",
+            time: new Date(d.appliedAt).toLocaleString("pt-BR", {
+              dateStyle: "short",
+              timeStyle: "short",
+            }),
+          }));
+
+        setInsulinData(mappedInsulin);
+
+        // ---------- ALIMENTAÇÃO ----------
+        const mappedMeals: FoodListItem[] = (meals as Meal[])
+          .sort(
+            (a, b) =>
+              new Date(b.eatenAt).getTime() -
+              new Date(a.eatenAt).getTime(),
+          )
+          .slice(0, 5)
+          .map((m) => ({
+            carbs: m.carbs,
+            mealType: m.mealType,
+            time: new Date(m.eatenAt).toLocaleString("pt-BR", {
+              dateStyle: "short",
+              timeStyle: "short",
+            }),
+          }));
+
+        setFoodData(mappedMeals);
+
+        // ---------- ATIVIDADE ----------
+        const mappedActivities: ActivityListItem[] = (
+          activities as ActivityRecord[]
+        )
+          .sort(
+            (a, b) =>
+              new Date(b.performedAt).getTime() -
+              new Date(a.performedAt).getTime(),
+          )
+          .slice(0, 5)
+          .map((a) => ({
+            activityType: a.activityType,
+            durationMinutes: a.durationMinutes,
+            time: new Date(a.performedAt).toLocaleString("pt-BR", {
+              dateStyle: "short",
+              timeStyle: "short",
+            }),
+          }));
+
+        setActivityData(mappedActivities);
+      } catch (error) {
+        console.error("Erro ao carregar dados da Home:", error);
       }
     };
 
-    loadGlucose();
-  }, [authUser]);
+    fetchData();
+  }, [userId]);
 
-  // =========
-  //  MOCKS (por enquanto) de insulina / comida / atividade
-  // =========
-  const insulinData = [
-    { units: 8, type: "Bolus", time: "Hoje, 12:15" },
-    { units: 18, type: "Basal", time: "Hoje, 07:00" },
-    { units: 6, type: "Bolus", time: "Ontem, 19:05" },
-    { units: 10, type: "Bolus", time: "Ontem, 13:00" },
-    { units: 18, type: "Basal", time: "Anteontem, 07:02" },
-  ];
-
-  const foodData = [
-    { carbs: 55, mealType: "Almoço", time: "Hoje, 12:30" },
-    { carbs: 32, mealType: "Café da manhã", time: "Hoje, 08:00" },
-    { carbs: 47, mealType: "Jantar", time: "Ontem, 19:40" },
-    { carbs: 18, mealType: "Lanche da tarde", time: "Ontem, 16:15" },
-    { carbs: 24, mealType: "Ceia", time: "Ontem, 22:10" },
-  ];
-
-  const activityData = [
-    { duration: "45 min", title: "Corrida", time: "Hoje, 06:30" },
-    { duration: "30 min", title: "Academia", time: "Ontem, 18:10" },
-    { duration: "60 min", title: "Ciclismo", time: "Ontem, 07:00" },
-    { duration: "25 min", title: "Caminhada", time: "Ontem, 12:20" },
-    { duration: "40 min", title: "Natação", time: "Seg, 07:15" },
-  ];
+  const glucoseCards: GlucoseListItem[] = useMemo(
+    () =>
+      glucoseData.slice(0, 5).map((g) => ({
+        value: `${g.value}mg/dl`,
+        context: g.period,
+        date: new Date(g.measuredAt).toLocaleString("pt-BR", {
+          dateStyle: "short",
+          timeStyle: "short",
+        }),
+      })),
+    [glucoseData],
+  );
 
   const renderTabContent = () => {
     switch (activeTab) {
       case "glucose":
         return (
           <div className="space-y-3 pb-4">
-            {loadingGlucose && (
-              <p className="text-sm text-muted-foreground">
-                Carregando registros de glicemia...
-              </p>
-            )}
-
-            {!loadingGlucose && glucoseCards.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Você ainda não registrou nenhuma glicemia.
-              </p>
-            )}
-
-            {!loadingGlucose &&
-              glucoseCards.map((item, index) => (
-                <InfoCard
-                  key={index}
-                  onClick={() => navigate("/glucose-form")}
-                  className="cursor-pointer hover:border-accent/30 border border-transparent"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-lg font-semibold text-accent mb-1">
-                        {item.value}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.context}
-                      </p>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {item.date}
+            {glucoseCards.map((item, index) => (
+              <InfoCard
+                key={index}
+                onClick={() => navigate("/glucose-form")}
+                className="cursor-pointer hover:border-accent/30 border border-transparent"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-lg font-semibold text-accent mb-1">
+                      {item.value}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.context}
                     </p>
                   </div>
-                </InfoCard>
-              ))}
+                  <p className="text-xs text-muted-foreground">
+                    {item.date}
+                  </p>
+                </div>
+              </InfoCard>
+            ))}
+
+            {glucoseCards.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhuma medição de glicemia registrada ainda.
+              </p>
+            )}
           </div>
         );
 
@@ -314,10 +387,18 @@ const HomePatient = () => {
                       </p>
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">{item.time}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.time}
+                  </p>
                 </div>
               </InfoCard>
             ))}
+
+            {insulinData.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhuma dose de insulina registrada ainda.
+              </p>
+            )}
           </div>
         );
 
@@ -331,23 +412,28 @@ const HomePatient = () => {
                 className="cursor-pointer hover:border-accent/30 border border-transparent"
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center">
-                      <UtensilsCrossed className="text-accent" size={18} />
-                    </div>
-                    <div>
-                      <p className="text-base font-semibold text-foreground">
-                        {item.carbs} g carboidratos
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.mealType}
-                      </p>
-                    </div>
+                  <div>
+                    <p className="text-lg font-semibold text-accent mb-1">
+                      {item.carbs} g carboidratos
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.mealType}
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">{item.time}</p>
+
+                  <div className="flex items-center text-xs text-muted-foreground">
+                    <Clock className="w-4 h-4 mr-1" />
+                    {item.time}
+                  </div>
                 </div>
               </InfoCard>
             ))}
+
+            {foodData.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhuma refeição registrada ainda.
+              </p>
+            )}
           </div>
         );
 
@@ -367,21 +453,33 @@ const HomePatient = () => {
                     </div>
                     <div>
                       <p className="text-base font-semibold text-foreground">
-                        {item.duration}
+                        {item.durationMinutes} min
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {item.title}
+                        {item.activityType}
                       </p>
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">{item.time}</p>
+
+                  <p className="text-xs text-muted-foreground">
+                    {item.time}
+                  </p>
                 </div>
               </InfoCard>
             ))}
+
+            {activityData.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhuma atividade registrada ainda.
+              </p>
+            )}
           </div>
         );
     }
   };
+
+  const avgLabel =
+    avgGlucose !== null ? `${Math.round(avgGlucose)}mg/dl` : "--";
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -397,60 +495,65 @@ const HomePatient = () => {
       </div>
 
       <div className="max-w-md mx-auto px-6 -mt-4 space-y-4">
-        {/* Card de média + gráfico 24h */}
         <InfoCard className="relative overflow-hidden">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm text-muted-foreground mb-1">Média glicemia</p>
-              <p className="text-4xl font-semibold text-accent mb-1">
-                {meanGlucose !== null ? Math.round(meanGlucose) : "--"}
-                <span className="text-2xl">mg/dL</span>
+              <p className="text-sm text-muted-foreground mb-1">
+                Média glicemia (últimas 24h)
               </p>
-              {meanGlucose !== null && (
-                <div className="flex items-center gap-1 text-success">
-                  <TrendingUp size={16} />
-                  <span className="text-xs font-medium">Dentro da meta</span>
-                </div>
-              )}
+              <p className="text-4xl font-semibold text-accent mb-1">
+                {avgLabel}
+              </p>
+              <div className="flex items-center gap-1 text-success">
+                <TrendingUp size={16} />
+                <span className="text-xs font-medium">
+                  {avgGlucose !== null
+                    ? "Dados reais do seu histórico"
+                    : "Sem dados nas últimas 24h"}
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-col items-center">
-              {last24hSeries.length > 1 ? (
-                <Sparkline24h
-                  values={last24hSeries}
-                  width={170}
-                  height={80}
-                  units="mg/dL"
-                />
+              {sparkValues.length >= 2 ? (
+                <>
+                  <Sparkline24h
+                    values={sparkValues}
+                    width={170}
+                    height={80}
+                    units="mg/dL"
+                  />
+                  <span className="mt-1 text-[11px] text-muted-foreground">
+                    Últimas 24 horas
+                  </span>
+                </>
               ) : (
-                <div className="flex items-center justify-center text-xs text-muted-foreground h-20">
-                  Sem dados suficientes
-                </div>
+                <span className="text-xs text-muted-foreground mt-6">
+                  Sem dados suficientes para o gráfico.
+                </span>
               )}
-              <span className="mt-1 text-[11px] text-muted-foreground">
-                Últimas 24 horas
-              </span>
             </div>
           </div>
         </InfoCard>
 
-        {/* Dica do dia (mocado por enquanto) */}
         <InfoCard className="bg-accent/5 border border-accent/20">
           <div className="flex gap-3">
             <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
               <Clock className="text-accent" size={20} />
             </div>
             <div>
-              <h3 className="font-medium text-foreground mb-1">Dica do dia</h3>
+              <h3 className="font-medium text-foreground mb-1">
+                Dica do dia
+              </h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Consuma mais carboidratos no almoço para manter a energia
-                durante o dia.
+                Lembre-se de registrar suas medições e doses de
+                insulina logo após realizar, para manter seu histórico
+                sempre atualizado.
               </p>
             </div>
           </div>
         </InfoCard>
 
-        {/* Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {tabs.map((tab) => (
             <button

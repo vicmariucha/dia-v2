@@ -25,7 +25,7 @@ export class AuthService {
     const user = await this.usersService.create({
       fullName: dto.fullName,
       email: dto.email,
-      password: dto.password,
+      password: dto.password, // senha em texto aqui, o hash é feito no UsersService
       role: UserRole.PATIENT,
       dateOfBirth: dto.dateOfBirth,
     });
@@ -64,7 +64,10 @@ export class AuthService {
     userId: number,
     email: string,
     role: UserRole,
-  ): Promise<{ accessToken: string; user: { id: number; email: string; role: UserRole } }> {
+  ): Promise<{
+    accessToken: string;
+    user: { id: number; email: string; role: UserRole };
+  }> {
     const payload = { sub: userId, email, role };
     const accessToken = await this.jwtService.signAsync(payload);
 

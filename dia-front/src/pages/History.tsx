@@ -1,3 +1,4 @@
+// dia-front/src/pages/History.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { BottomNav } from "@/components/dia/BottomNav";
@@ -12,9 +13,12 @@ import {
   X,
   Download,
 } from "lucide-react";
-
-import { useAuthUser } from "@/hooks/useAuthUser";
-import { listGlucose, type GlucoseMeasurement } from "@/lib/api";
+import {
+  listGlucose,
+  listInsulin,
+  listMeals,
+  listActivities,
+} from "../lib/api";
 
 type TabId = "glucose" | "insulin" | "food" | "activity";
 type PeriodKey = "7" | "30" | "90" | "custom";
@@ -26,40 +30,29 @@ type GlucoseItem = {
   context: string;
   at: number;
 };
-type InsulinItem = { id: string; units: number; type: "Bolus" | "Basal"; at: number };
-type FoodItem = { id: string; carbs: number; mealType: string; at: number };
-type ActivityItem = { id: string; durationMin: number; title: string; at: number };
 
-const now = Date.now();
+type InsulinItem = {
+  id: string;
+  units: number;
+  type: "Bolus" | "Basal";
+  at: number;
+};
+
+type FoodItem = {
+  id: string;
+  carbs: number;
+  mealType: string;
+  at: number;
+};
+
+type ActivityItem = {
+  id: string;
+  durationMin: number;
+  title: string;
+  at: number;
+};
+
 const day = 24 * 60 * 60 * 1000;
-
-/** ---------- MOCK DATA (ainda) PARA INSULINA / COMIDA / ATIVIDADE ---------- */
-
-const INSULIN: InsulinItem[] = [
-  { id: "i1", units: 8,  type: "Bolus", at: now - 0.5 * day },
-  { id: "i2", units: 18, type: "Basal", at: now - 1   * day + 7  * 60 * 60 * 1000 },
-  { id: "i3", units: 6,  type: "Bolus", at: now - 2   * day + 19 * 60 * 60 * 1000 },
-  { id: "i4", units: 10, type: "Bolus", at: now - 3   * day + 13 * 60 * 60 * 1000 },
-  { id: "i5", units: 18, type: "Basal", at: now - 4   * day + 7  * 60 * 60 * 1000 },
-];
-
-const FOOD: FoodItem[] = [
-  { id: "f1", carbs: 55, mealType: "Almoço",          at: now - 0.5 * day },
-  { id: "f2", carbs: 32, mealType: "Café da manhã",   at: now - 1   * day + 8  * 60 * 60 * 1000 },
-  { id: "f3", carbs: 47, mealType: "Jantar",          at: now - 2   * day + 19 * 60 * 60 * 1000 },
-  { id: "f4", carbs: 18, mealType: "Lanche da tarde", at: now - 2   * day + 16 * 60 * 60 * 1000 },
-  { id: "f5", carbs: 24, mealType: "Ceia",            at: now - 2   * day + 22 * 60 * 60 * 1000 },
-];
-
-const ACTIVITY: ActivityItem[] = [
-  { id: "a1", durationMin: 45, title: "Corrida",   at: now - 1 * day + 6.5  * 60 * 60 * 1000 },
-  { id: "a2", durationMin: 30, title: "Academia",  at: now - 2 * day + 18   * 60 * 60 * 1000 },
-  { id: "a3", durationMin: 60, title: "Ciclismo",  at: now - 2 * day + 7    * 60 * 60 * 1000 },
-  { id: "a4", durationMin: 25, title: "Caminhada", at: now - 2 * day + 12   * 60 * 60 * 1000 },
-  { id: "a5", durationMin: 40, title: "Natação",   at: now - 3 * day + 7.25 * 60 * 60 * 1000 },
-];
-
-/** ------------------------------------------------ */
 
 const ICONS: Record<TabId, (props: any) => JSX.Element> = {
   glucose: (p) => <Activity {...p} />,
@@ -81,16 +74,19 @@ const formatDateTime = (t: number) =>
     timeStyle: "short",
   });
 
-const toISODate = (t: number) => new Date(t).toISOString().slice(0, 10);
+const toISODate = (t: number) =>
+  new Date(t).toISOString().slice(0, 10);
+
+type StoredUser = {
+  id: number;
+  email: string;
+  role: "PATIENT" | "DOCTOR";
+};
 
 const History = () => {
-  const authUser = useAuthUser();
-
-  // dados vindos da API
-  const [glucoseData, setGlucoseData] = useState<GlucoseItem[]>([]);
-  const [loadingGlucose, setLoadingGlucose] = useState(true);
-
-  const [selected, setSelected] = useState<Set<TabId>>(new Set(["glucose"]));
+  const [selected, setSelected] = useState<Set<TabId>>(
+    new Set(["glucose", "insulin"]),
+  );
   const [catOpen, setCatOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -98,40 +94,15 @@ const History = () => {
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
 
-  const [exportFormat, setExportFormat] = useState<"csv" | "pdf">("csv");
+  const [exportFormat, setExportFormat] =
+    useState<"csv" | "pdf">("csv");
 
-  // =======================
-  //   CARREGAR GLICEMIAS DO BACK
-  // =======================
-  useEffect(() => {
-    if (!authUser) return;
+  const [glucoseItems, setGlucoseItems] = useState<GlucoseItem[]>([]);
+  const [insulinItems, setInsulinItems] = useState<InsulinItem[]>([]);
+  const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
+  const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
 
-    const load = async () => {
-      try {
-        setLoadingGlucose(true);
-        const data: GlucoseMeasurement[] = await listGlucose(authUser.id);
-
-        const mapped: GlucoseItem[] = data.map((g) => ({
-          id: String(g.id),
-          value: g.value,
-          unit: "mg/dL",
-          context: g.period,
-          at: new Date(g.measuredAt).getTime(),
-        }));
-
-        setGlucoseData(mapped);
-      } catch (err) {
-        console.error("Erro ao carregar histórico de glicemia", err);
-        setGlucoseData([]);
-      } finally {
-        setLoadingGlucose(false);
-      }
-    };
-
-    load();
-  }, [authUser]);
-
-  // dropdown categorias
+  // fecha o dropdown ao clicar fora
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
       if (!dropdownRef.current) return;
@@ -139,9 +110,72 @@ const History = () => {
         setCatOpen(false);
       }
     };
-    if (catOpen) document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    if (catOpen)
+      document.addEventListener("mousedown", onClickOutside);
+    return () =>
+      document.removeEventListener("mousedown", onClickOutside);
   }, [catOpen]);
+
+  // 🔗 Carrega dados reais do backend
+  useEffect(() => {
+    const userRaw = localStorage.getItem("user");
+    if (!userRaw) return;
+
+    const user: StoredUser = JSON.parse(userRaw);
+
+    const load = async () => {
+      try {
+        const [glucose, insulin, meals, activities] =
+          await Promise.all([
+            listGlucose(user.id),
+            listInsulin(user.id, 200),
+            listMeals(user.id, 200),
+            listActivities(user.id, 200),
+          ]);
+
+        setGlucoseItems(
+          glucose.map((g) => ({
+            id: String(g.id),
+            value: g.value,
+            unit: "mg/dL" as const,
+            context: g.period,
+            at: new Date(g.measuredAt).getTime(),
+          })),
+        );
+
+        setInsulinItems(
+          insulin.map((i) => ({
+            id: String(i.id),
+            units: i.units,
+            type: i.type === "BASAL" ? "Basal" : "Bolus",
+            at: new Date(i.appliedAt).getTime(),
+          })),
+        );
+
+        setFoodItems(
+          meals.map((m) => ({
+            id: String(m.id),
+            carbs: m.carbs,
+            mealType: m.mealType,
+            at: new Date(m.eatenAt).getTime(),
+          })),
+        );
+
+        setActivityItems(
+          activities.map((a) => ({
+            id: String(a.id),
+            durationMin: a.durationMinutes,
+            title: a.activityType,
+            at: new Date(a.performedAt).getTime(),
+          })),
+        );
+      } catch (error) {
+        console.error("Erro ao carregar histórico:", error);
+      }
+    };
+
+    load();
+  }, []);
 
   const toggleCategory = (id: TabId) => {
     setSelected((prev) => {
@@ -153,45 +187,61 @@ const History = () => {
     });
   };
 
-  const clearCategories = () => setSelected(new Set<TabId>());
+  const clearCategories = () =>
+    setSelected(new Set<TabId>());
 
   const range = useMemo(() => {
     const end = Date.now();
+
     if (period === "custom" && customStart && customEnd) {
       const s = new Date(customStart).getTime();
-      const e = new Date(customEnd).getTime() + 24 * 60 * 60 * 1000 - 1;
-      if (isFinite(s) && isFinite(e) && s <= e) return { start: s, end: e };
+      const e =
+        new Date(customEnd).getTime() +
+        24 * 60 * 60 * 1000 -
+        1;
+      if (isFinite(s) && isFinite(e) && s <= e)
+        return { start: s, end: e };
     }
+
     const map: Record<Exclude<PeriodKey, "custom">, number> = {
       "7": 7,
       "30": 30,
       "90": 90,
     };
     const days =
-      map[(period === "custom" ? "30" : period) as Exclude<PeriodKey, "custom">];
+      map[
+        (period === "custom"
+          ? "30"
+          : period) as Exclude<PeriodKey, "custom">
+      ];
     return { start: end - days * day, end };
   }, [period, customStart, customEnd]);
 
   const between = <T extends { at: number }>(arr: T[]) =>
     arr
-      .filter((i) => i.at >= range.start && i.at <= range.end)
+      .filter(
+        (i) => i.at >= range.start && i.at <= range.end,
+      )
       .sort((a, b) => b.at - a.at);
 
-  const filtered = useMemo(() => {
-    return {
-      glucose: between(glucoseData),
-      insulin: between(INSULIN),
-      food: between(FOOD),
-      activity: between(ACTIVITY),
-    };
-  }, [range, glucoseData]);
+  const filtered = useMemo(
+    () => ({
+      glucose: between(glucoseItems),
+      insulin: between(insulinItems),
+      food: between(foodItems),
+      activity: between(activityItems),
+    }),
+    [range, glucoseItems, insulinItems, foodItems, activityItems],
+  );
 
   const SectionTitle = ({ id }: { id: TabId }) => (
     <div className="flex items-center gap-2 px-1">
       <div className="w-8 h-8 rounded-full bg-accent/10 grid place-items-center">
         {ICONS[id]({ className: "text-accent", size: 16 })}
       </div>
-      <h3 className="text-sm font-semibold text-foreground">{LABELS[id]}</h3>
+      <h3 className="text-sm font-semibold text-foreground">
+        {LABELS[id]}
+      </h3>
     </div>
   );
 
@@ -201,37 +251,38 @@ const History = () => {
       return (
         <div className="space-y-3">
           <SectionTitle id={id} />
-          {loadingGlucose && (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Carregando registros de glicemia...
-            </p>
-          )}
-          {!loadingGlucose &&
-            list.map((g) => (
-              <InfoCard key={g.id} className="border border-transparent">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-accent/10 grid place-items-center">
-                      <Activity className="text-accent" size={18} />
-                    </div>
-                    <div>
-                      <p className="text-base font-semibold text-foreground">
-                        {g.value} {g.unit}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {g.context}
-                      </p>
-                    </div>
+          {list.map((g) => (
+            <InfoCard
+              key={g.id}
+              className="border border-transparent"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-accent/10 grid place-items-center">
+                    <Activity
+                      className="text-accent"
+                      size={18}
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDateTime(g.at)}
-                  </p>
+                  <div>
+                    <p className="text-base font-semibold text-foreground">
+                      {g.value} {g.unit}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {g.context}
+                    </p>
+                  </div>
                 </div>
-              </InfoCard>
-            ))}
-          {!loadingGlucose && list.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {formatDateTime(g.at)}
+                </p>
+              </div>
+            </InfoCard>
+          ))}
+          {list.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">
-              Nenhum registro no período selecionado.
+              Nenhum registro de glicemia no período
+              selecionado.
             </p>
           )}
         </div>
@@ -244,17 +295,25 @@ const History = () => {
         <div className="space-y-3">
           <SectionTitle id={id} />
           {list.map((i) => (
-            <InfoCard key={i.id} className="border border-transparent">
+            <InfoCard
+              key={i.id}
+              className="border border-transparent"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-accent/10 grid place-items-center">
-                    <Droplet className="text-accent" size={18} />
+                    <Droplet
+                      className="text-accent"
+                      size={18}
+                    />
                   </div>
                   <div>
                     <p className="text-base font-semibold text-foreground">
                       {i.units} U
                     </p>
-                    <p className="text-sm text-muted-foreground">{i.type}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {i.type}
+                    </p>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -265,7 +324,8 @@ const History = () => {
           ))}
           {list.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">
-              Nenhum registro no período selecionado.
+              Nenhum registro de insulina no período
+              selecionado.
             </p>
           )}
         </div>
@@ -278,11 +338,17 @@ const History = () => {
         <div className="space-y-3">
           <SectionTitle id={id} />
           {list.map((f) => (
-            <InfoCard key={f.id} className="border border-transparent">
+            <InfoCard
+              key={f.id}
+              className="border border-transparent"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-accent/10 grid place-items-center">
-                    <UtensilsCrossed className="text-accent" size={18} />
+                    <UtensilsCrossed
+                      className="text-accent"
+                      size={18}
+                    />
                   </div>
                   <div>
                     <p className="text-base font-semibold text-foreground">
@@ -301,29 +367,39 @@ const History = () => {
           ))}
           {list.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">
-              Nenhum registro no período selecionado.
+              Nenhum registro de alimentação no período
+              selecionado.
             </p>
           )}
         </div>
       );
     }
 
+    // activity
     const list = filtered.activity;
     return (
       <div className="space-y-3">
         <SectionTitle id={id} />
         {list.map((a) => (
-          <InfoCard key={a.id} className="border border-transparent">
+          <InfoCard
+            key={a.id}
+            className="border border-transparent"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full bg-accent/10 grid place-items-center">
-                  <Dumbbell className="text-accent" size={18} />
+                  <Dumbbell
+                    className="text-accent"
+                    size={18}
+                  />
                 </div>
                 <div>
                   <p className="text-base font-semibold text-foreground">
                     {a.durationMin} min
                   </p>
-                  <p className="text-sm text-muted-foreground">{a.title}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {a.title}
+                  </p>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -334,14 +410,20 @@ const History = () => {
         ))}
         {list.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-6">
-            Nenhum registro no período selecionado.
+            Nenhum registro de atividade no período
+            selecionado.
           </p>
         )}
       </div>
     );
   };
 
-  const categories: TabId[] = ["glucose", "insulin", "food", "activity"];
+  const categories: TabId[] = [
+    "glucose",
+    "insulin",
+    "food",
+    "activity",
+  ];
   const selectedArray = Array.from(selected);
 
   /** ------- Export helpers (CSV / PDF) ------- */
@@ -403,7 +485,11 @@ const History = () => {
     const lines: string[] = [];
     lines.push(header.map(quote).join(","));
     for (const r of rows) {
-      lines.push([r.categoria, r.valor, r.detalhe, r.dataHora].map(quote).join(","));
+      lines.push(
+        [r.categoria, r.valor, r.detalhe, r.dataHora]
+          .map(quote)
+          .join(","),
+      );
     }
     return lines.join("\n");
   };
@@ -412,7 +498,9 @@ const History = () => {
     const blob =
       content instanceof Blob
         ? content
-        : new Blob([content], { type: "text/plain;charset=utf-8" });
+        : new Blob([content], {
+            type: "text/plain;charset=utf-8",
+          });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -429,7 +517,9 @@ const History = () => {
     const cats =
       selected.size === categories.length
         ? "Todas"
-        : selectedArray.map((id) => LABELS[id]).join(", ");
+        : selectedArray
+            .map((id) => LABELS[id])
+            .join(", ");
 
     const htmlRows = rows
       .map(
@@ -496,15 +586,21 @@ const History = () => {
     const startISO = toISODate(range.start);
     const endISO = toISODate(range.end);
     const cats =
-      selected.size === categories.length ? "todas" : selectedArray.join("-");
+      selected.size === categories.length
+        ? "todas"
+        : selectedArray.join("-");
 
     if (exportFormat === "csv") {
       const csv = toCSV(rows);
-      download(csv, `relatorio_${cats}_${startISO}_a_${endISO}.csv`);
+      download(
+        csv,
+        `relatorio_${cats}_${startISO}_a_${endISO}.csv`,
+      );
     } else {
       exportPDF(rows);
     }
   };
+  /** -------------------------------------------- */
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -522,27 +618,34 @@ const History = () => {
       <div className="max-w-md mx-auto px-6 -mt-4 space-y-4">
         <InfoCard className="sticky top-2 z-10">
           <div className="flex items-center gap-2 mb-3">
-            <CalendarRange size={16} className="text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">Período</p>
+            <CalendarRange
+              size={16}
+              className="text-muted-foreground"
+            />
+            <p className="text-sm font-medium text-foreground">
+              Período
+            </p>
           </div>
 
           <div className="grid grid-cols-4 gap-2">
-            {(["7", "30", "90", "custom"] as PeriodKey[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                className={
-                  p === period
-                    ? "rounded-full px-3 py-2 text-xs bg-accent text-white font-medium"
-                    : "rounded-full px-3 py-2 text-xs bg-card border border-border text-foreground hover:bg-muted transition-smooth"
-                }
-              >
-                {p === "7" && "7 dias"}
-                {p === "30" && "30 dias"}
-                {p === "90" && "90 dias"}
-                {p === "custom" && "Custom"}
-              </button>
-            ))}
+            {(["7", "30", "90", "custom"] as PeriodKey[]).map(
+              (p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  className={
+                    p === period
+                      ? "rounded-full px-3 py-2 text-xs bg-accent text-white font-medium"
+                      : "rounded-full px-3 py-2 text-xs bg-card border border-border text-foreground hover:bg-muted transition-smooth"
+                  }
+                >
+                  {p === "7" && "7 dias"}
+                  {p === "30" && "30 dias"}
+                  {p === "90" && "90 dias"}
+                  {p === "custom" && "Custom"}
+                </button>
+              ),
+            )}
           </div>
 
           {period === "custom" && (
@@ -550,13 +653,17 @@ const History = () => {
               <input
                 type="date"
                 value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
+                onChange={(e) =>
+                  setCustomStart(e.target.value)
+                }
                 className="w-full bg-card border border-border rounded-3xl py-3 px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
               />
               <input
                 type="date"
                 value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
+                onChange={(e) =>
+                  setCustomEnd(e.target.value)
+                }
                 className="w-full bg-card border border-border rounded-3xl py-3 px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
               />
             </div>
@@ -583,7 +690,9 @@ const History = () => {
               </div>
 
               <button
-                onClick={() => setCatOpen((v) => !v)}
+                onClick={() =>
+                  setCatOpen((v) => !v)
+                }
                 aria-expanded={catOpen}
                 aria-haspopup="listbox"
                 className="mt-2 w-full bg-card border border-border rounded-3xl px-4 py-3 text-left text-sm flex items-center justify-between hover:bg-muted transition-smooth"
@@ -597,12 +706,18 @@ const History = () => {
                           .join(", ")
                     : "Selecione categorias..."}
                 </span>
-                <Filter size={16} className="text-muted-foreground ml-3" />
+                <Filter
+                  size={16}
+                  className="text-muted-foreground ml-3"
+                />
               </button>
 
               {catOpen && (
-                <div className="absolute left={0} right-0 mt-2 bg-card border border-accent/30 rounded-2xl shadow-2xl z-20 overflow-hidden">
-                  <ul role="listbox" className="max-h-64 overflow-auto py-2">
+                <div className="absolute left-0 right-0 mt-2 bg-card border border-accent/30 rounded-2xl shadow-2xl z-20 overflow-hidden">
+                  <ul
+                    role="listbox"
+                    className="max-h-64 overflow-auto py-2"
+                  >
                     {categories.map((id) => {
                       const Icon = ICONS[id];
                       const active = selected.has(id);
@@ -611,7 +726,9 @@ const History = () => {
                           <button
                             role="option"
                             aria-selected={active}
-                            onClick={() => toggleCategory(id)}
+                            onClick={() =>
+                              toggleCategory(id)
+                            }
                             className="w-full px-3 py-2 flex items-center gap-3 hover:bg-muted/60 transition-smooth text-sm"
                           >
                             <span className="w-8 h-8 rounded-full grid place-items-center bg-accent/10 text-accent">
@@ -621,7 +738,10 @@ const History = () => {
                               {LABELS[id]}
                             </span>
                             {active ? (
-                              <Check size={16} className="text-success" />
+                              <Check
+                                size={16}
+                                className="text-success"
+                              />
                             ) : (
                               <span className="w-4 h-4 rounded-full border border-border" />
                             )}
@@ -642,7 +762,10 @@ const History = () => {
                 <select
                   value={exportFormat}
                   onChange={(e) =>
-                    setExportFormat(e.target.value as "csv" | "pdf")
+                    setExportFormat(
+                      e.target
+                        .value as "csv" | "pdf",
+                    )
                   }
                   className="bg-card border border-border rounded-2xl px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
                 >
@@ -657,7 +780,10 @@ const History = () => {
                 disabled={selected.size === 0}
                 title="Exportar dados"
               >
-                <Download size={16} className="text-white" />
+                <Download
+                  size={16}
+                  className="text-white"
+                />
                 Exportar dados
               </button>
             </div>
