@@ -20,7 +20,6 @@ export const BottomNav = () => {
 
   const isActive = (path: string) => location.pathname === path;
 
-  // Agrupa todas as rotas relacionadas ao médico
   const isDoctorSection =
     location.pathname === "/my-doctor" ||
     location.pathname.startsWith("/doctor/") ||

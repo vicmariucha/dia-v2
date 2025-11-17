@@ -25,6 +25,7 @@ import MyDoctor from "./pages/MyDoctor";
 import DoctorDetail from "./pages/DoctorDetail";
 import DoctorChat from "./pages/DoctorChat";
 import History from "./pages/History";
+import DoctorProfile from "@/pages/doctor/DoctorProfile";
 
 const queryClient = new QueryClient();
 
@@ -57,7 +58,9 @@ const App = () => (
           <Route path="/doctor/:id" element={<DoctorDetail />} />
           <Route path="/chat/:id" element={<DoctorChat />} />
           <Route path="/history" element={<History />} />
+          <Route path="/doctor/profile" element={<DoctorProfile />} />
           <Route path="*" element={<NotFound />} />
+
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

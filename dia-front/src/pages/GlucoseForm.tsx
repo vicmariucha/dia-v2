@@ -11,7 +11,7 @@ import { useAuthUser } from "@/hooks/useAuthUser";
 
 const GlucoseForm = () => {
   const navigate = useNavigate();
-  const user = useAuthUser(); // se não tiver user, redireciona pro /login
+  const user = useAuthUser(); 
 
   const [formData, setFormData] = useState({
     value: "",
@@ -24,7 +24,6 @@ const GlucoseForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  // enquanto está redirecionando / ainda não carregou user, não renderiza nada
   if (!user) {
     return null;
   }

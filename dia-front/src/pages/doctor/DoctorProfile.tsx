@@ -1,34 +1,28 @@
-// src/pages/Perfil.tsx
+// src/pages/doctor/DoctorProfile.tsx
 import { useEffect, useMemo, useState } from "react";
 import {
   Pencil,
   User as UserIcon,
   Mail,
   Calendar,
-  Droplet,
-  Syringe,
-  Activity,
+  Stethoscope,
+  IdCard,
   CheckCircle,
   LogOut,
 } from "lucide-react";
 import { InfoCard } from "@/components/dia/InfoCard";
-import { BottomNav } from "@/components/dia/BottomNav";
 import { AppTextField } from "@/components/dia/AppTextField";
 import { toast } from "sonner";
-
-import { useAuthUser } from "@/hooks/useAuthUser";
-import { getUser, type UserDetails } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
+import DoctorBottomNav from "@/components/dia/DoctorBottomNav";
+import type { UserDetails } from "@/lib/api";
 
-type PatientData = {
+type DoctorData = {
   name: string;
   email: string;
   birthDate: string;
-  diabetesType: "Tipo 1" | "Tipo 2";
-  treatment: "Insulina" | "Medicação oral" | "Dieta e exercício";
-  glucoseChecks: "1-2" | "3-5" | "6+";
-  bolusInsulin: string;
-  basalInsulin: string;
+  specialty: string;
+  crm: string;
 };
 
 const formatPtDate = (iso: string) => {
@@ -37,7 +31,7 @@ const formatPtDate = (iso: string) => {
   return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
 };
 
-const isEqual = (a: PatientData, b: PatientData) =>
+const isEqual = (a: DoctorData, b: DoctorData) =>
   JSON.stringify(a) === JSON.stringify(b);
 
 const FieldRow = ({
@@ -62,61 +56,53 @@ const FieldRow = ({
   </div>
 );
 
-const Perfil = () => {
-  const authUser = useAuthUser();
+const DoctorProfile = () => {
   const navigate = useNavigate();
 
-  const [data, setData] = useState<PatientData>({
+  const [data, setData] = useState<DoctorData>({
     name: "",
     email: "",
     birthDate: "",
-    diabetesType: "Tipo 1",
-    treatment: "Insulina",
-    glucoseChecks: "1-2",
-    bolusInsulin: "",
-    basalInsulin: "",
+    specialty: "",
+    crm: "",
   });
 
   const [isEditing, setIsEditing] = useState(false);
-  const [edited, setEdited] = useState<PatientData>(data);
+  const [edited, setEdited] = useState<DoctorData>(data);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!authUser) return;
-
-    const load = async () => {
+    const load = () => {
       try {
         setLoading(true);
-        const user: UserDetails = await getUser(authUser.id);
+        const raw = localStorage.getItem("user");
+        if (!raw) {
+          setLoading(false);
+          return;
+        }
 
-        const profile = user.patientProfile;
+        const user = JSON.parse(raw) as UserDetails;
+        const profile = (user as any).doctorProfile;
 
-        const mapped: PatientData = {
+        const mapped: DoctorData = {
           name: user.fullName,
           email: user.email,
           birthDate: user.dateOfBirth?.slice(0, 10) ?? "",
-          diabetesType:
-            (profile?.diabetesType as PatientData["diabetesType"]) ?? "Tipo 1",
-          treatment:
-            (profile?.treatment as PatientData["treatment"]) ?? "Insulina",
-          glucoseChecks:
-            (profile?.glucoseChecksPerDay as PatientData["glucoseChecks"]) ??
-            "1-2",
-          bolusInsulin: profile?.bolusInsulin ?? "",
-          basalInsulin: profile?.basalInsulin ?? "",
+          specialty: profile?.specialty ?? "",
+          crm: profile?.crm ?? "",
         };
 
         setData(mapped);
         setEdited(mapped);
       } catch (err) {
-        console.error("Erro ao carregar perfil do paciente", err);
+        console.error("Erro ao carregar perfil do médico", err);
       } finally {
         setLoading(false);
       }
     };
 
     load();
-  }, [authUser]);
+  }, []);
 
   const initials = useMemo(() => {
     if (!data.name) return "--";
@@ -146,6 +132,26 @@ const Perfil = () => {
 
     setData(edited);
     setIsEditing(false);
+
+    // opcional: atualizar também o user salvo no localStorage
+    const raw = localStorage.getItem("user");
+    if (raw) {
+      try {
+        const user = JSON.parse(raw) as any;
+        user.fullName = edited.name;
+        user.email = edited.email;
+        user.dateOfBirth = edited.birthDate;
+        user.doctorProfile = {
+          ...(user.doctorProfile || {}),
+          specialty: edited.specialty,
+          crm: edited.crm,
+        };
+        localStorage.setItem("user", JSON.stringify(user));
+      } catch (e) {
+        console.error("Erro ao atualizar user no localStorage", e);
+      }
+    }
+
     toast.success("Salvo com sucesso!", {
       icon: <CheckCircle size={18} className="text-success" />,
       position: "top-center",
@@ -155,7 +161,7 @@ const Perfil = () => {
 
   const handleLogout = () => {
     const confirmed = window.confirm(
-      "Você realmente deseja sair da sua conta?"
+      "Você realmente deseja sair da sua conta?",
     );
     if (!confirmed) return;
 
@@ -186,7 +192,7 @@ const Perfil = () => {
             Perfil
           </h1>
           <p className="text-white/80 text-sm font-poppins">
-            Suas informações de paciente
+            Suas informações de profissional de saúde
           </p>
         </div>
       </div>
@@ -279,152 +285,49 @@ const Perfil = () => {
         <InfoCard>
           <div className="mb-2">
             <h2 className="text-base font-semibold text-foreground">
-              Dados de saúde
+              Dados profissionais
             </h2>
             <p className="text-xs text-muted-foreground">
-              Diabetes e tratamento
+              Informações sobre sua atuação
             </p>
           </div>
 
           <div className="divide-y divide-border mt-2">
             <FieldRow
-              icon={<Droplet size={16} />}
-              label="Tipo de diabetes"
+              icon={<Stethoscope size={16} />}
+              label="Especialidade"
               valueNode={
                 isEditing ? (
-                  <select
-                    value={edited.diabetesType}
+                  <AppTextField
+                    value={edited.specialty}
                     onChange={(e) =>
-                      setEdited((p) => ({
-                        ...p,
-                        diabetesType:
-                          e.target.value as PatientData["diabetesType"],
-                      }))
+                      setEdited((p) => ({ ...p, specialty: e.target.value }))
                     }
-                    className="w-full bg-card border border-border rounded-3xl py-3.5 px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
-                  >
-                    <option value="Tipo 1">Tipo 1</option>
-                    <option value="Tipo 2">Tipo 2</option>
-                  </select>
+                    placeholder="Ex.: Endocrinologia"
+                  />
                 ) : (
                   <p className="text-sm font-medium text-foreground">
-                    {data.diabetesType}
+                    {data.specialty || "—"}
                   </p>
                 )
               }
             />
 
             <FieldRow
-              icon={<Activity size={16} />}
-              label="Tratamento atual"
+              icon={<IdCard size={16} />}
+              label="CRM"
               valueNode={
                 isEditing ? (
-                  <select
-                    value={edited.treatment}
+                  <AppTextField
+                    value={edited.crm}
                     onChange={(e) =>
-                      setEdited((p) => ({
-                        ...p,
-                        treatment:
-                          e.target.value as PatientData["treatment"],
-                      }))
+                      setEdited((p) => ({ ...p, crm: e.target.value }))
                     }
-                    className="w-full bg-card border border-border rounded-3xl py-3.5 px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
-                  >
-                    <option value="Insulina">Insulina</option>
-                    <option value="Medicação oral">Medicação oral</option>
-                    <option value="Dieta e exercício">
-                      Dieta e exercício
-                    </option>
-                  </select>
+                    placeholder="123456"
+                  />
                 ) : (
                   <p className="text-sm font-medium text-foreground">
-                    {data.treatment}
-                  </p>
-                )
-              }
-            />
-
-            <FieldRow
-              icon={<Activity size={16} />}
-              label="Medições de glicemia/dia"
-              valueNode={
-                isEditing ? (
-                  <select
-                    value={edited.glucoseChecks}
-                    onChange={(e) =>
-                      setEdited((p) => ({
-                        ...p,
-                        glucoseChecks:
-                          e.target.value as PatientData["glucoseChecks"],
-                      }))
-                    }
-                    className="w-full bg-card border border-border rounded-3xl py-3.5 px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
-                  >
-                    <option value="1-2">1-2 vezes</option>
-                    <option value="3-5">3-5 vezes</option>
-                    <option value="6+">6 ou mais vezes</option>
-                  </select>
-                ) : (
-                  <p className="text-sm font-medium text-foreground">
-                    {data.glucoseChecks} vezes
-                  </p>
-                )
-              }
-            />
-
-            <FieldRow
-              icon={<Syringe size={16} />}
-              label="Insulina bolus"
-              valueNode={
-                isEditing ? (
-                  <select
-                    value={edited.bolusInsulin}
-                    onChange={(e) =>
-                      setEdited((p) => ({
-                        ...p,
-                        bolusInsulin: e.target.value,
-                      }))
-                    }
-                    className="w-full bg-card border border-border rounded-3xl py-3.5 px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
-                  >
-                    <option value="">Selecione...</option>
-                    <option value="Regular">Regular</option>
-                    <option value="Lispro">Lispro</option>
-                    <option value="Aspart">Aspart</option>
-                    <option value="Glulisina">Glulisina</option>
-                  </select>
-                ) : (
-                  <p className="text-sm font-medium text-foreground">
-                    {data.bolusInsulin || "—"}
-                  </p>
-                )
-              }
-            />
-
-            <FieldRow
-              icon={<Syringe size={16} />}
-              label="Insulina basal"
-              valueNode={
-                isEditing ? (
-                  <select
-                    value={edited.basalInsulin}
-                    onChange={(e) =>
-                      setEdited((p) => ({
-                        ...p,
-                        basalInsulin: e.target.value,
-                      }))
-                    }
-                    className="w-full bg-card border border-border rounded-3xl py-3.5 px-4 text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-smooth"
-                  >
-                    <option value="">Selecione...</option>
-                    <option value="NPH">NPH</option>
-                    <option value="Glargina">Glargina</option>
-                    <option value="Detemir">Detemir</option>
-                    <option value="Degludec">Degludec</option>
-                  </select>
-                ) : (
-                  <p className="text-sm font-medium text-foreground">
-                    {data.basalInsulin || "—"}
+                    {data.crm || "—"}
                   </p>
                 )
               }
@@ -470,9 +373,9 @@ const Perfil = () => {
         )}
       </div>
 
-      <BottomNav />
+      <DoctorBottomNav />
     </div>
   );
 };
 
-export default Perfil;
+export default DoctorProfile;

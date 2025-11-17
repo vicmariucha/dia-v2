@@ -102,7 +102,6 @@ const History = () => {
   const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>([]);
 
-  // fecha o dropdown ao clicar fora
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
       if (!dropdownRef.current) return;
@@ -116,7 +115,6 @@ const History = () => {
       document.removeEventListener("mousedown", onClickOutside);
   }, [catOpen]);
 
-  // 🔗 Carrega dados reais do backend
   useEffect(() => {
     const userRaw = localStorage.getItem("user");
     if (!userRaw) return;
@@ -375,7 +373,6 @@ const History = () => {
       );
     }
 
-    // activity
     const list = filtered.activity;
     return (
       <div className="space-y-3">
@@ -426,7 +423,7 @@ const History = () => {
   ];
   const selectedArray = Array.from(selected);
 
-  /** ------- Export helpers (CSV / PDF) ------- */
+  /** ------- export ------- */
   const buildRows = () => {
     const rows: {
       categoria: string;

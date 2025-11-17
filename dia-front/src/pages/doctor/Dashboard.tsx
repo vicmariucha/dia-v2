@@ -5,6 +5,7 @@ import { Patient } from "@/lib/types";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { CurvedHeader } from "@/components/dia/CurvedHeader";
 import { ChevronRight } from "lucide-react";
+import DoctorBottomNav from "@/components/dia/DoctorBottomNav";
 
 export default function DoctorDashboard() {
   const navigate = useNavigate();
@@ -98,6 +99,8 @@ export default function DoctorDashboard() {
             </InfoCard>
           ))}
       </div>
+          <DoctorBottomNav />
+
     </div>
   );
 }

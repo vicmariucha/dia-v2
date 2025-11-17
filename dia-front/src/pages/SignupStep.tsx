@@ -1,7 +1,7 @@
 // dia-v2/src/pages/SignupStep.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calendar, ChevronRight, ChevronDown } from "lucide-react";
+import { Calendar, ChevronRight, ChevronDown, ChevronLeft } from "lucide-react";
 import { CurvedHeader } from "@/components/dia/CurvedHeader";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { AppTextField } from "@/components/dia/AppTextField";
@@ -11,10 +11,13 @@ const SignupStep = () => {
   const [birthDate, setBirthDate] = useState("");
   const [userType, setUserType] = useState("");
 
+  const handleBack = () => {
+    navigate(-1);
+  };
+
   const handleNext = () => {
     if (!birthDate || !userType) return;
 
-    // guarda essa etapa (data e tipo)
     sessionStorage.setItem(
       "signupStep",
       JSON.stringify({
@@ -75,6 +78,14 @@ const SignupStep = () => {
                   </div>
                 </div>
               </div>
+
+              <button
+                onClick={handleBack}
+                aria-label="Voltar"
+                className="absolute bottom-4 left-6 w-10 h-10 rounded-full bg-accent flex items-center justify-center shadow-elevated hover:shadow-soft transition-smooth"
+              >
+                <ChevronLeft className="w-4 h-4 text-white" />
+              </button>
 
               <button
                 onClick={handleNext}

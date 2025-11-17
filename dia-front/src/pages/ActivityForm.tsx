@@ -76,7 +76,6 @@ const ActivityForm = () => {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      {/* Header */}
       <div className="bg-card border-b border-border px-6 py-4">
         <div className="max-w-md mx-auto flex items-center gap-4">
           <button

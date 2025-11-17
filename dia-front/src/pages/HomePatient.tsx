@@ -211,7 +211,6 @@ const HomePatient = () => {
     }
   }, []);
 
-  // 🔗 Carregar dados reais do back
   useEffect(() => {
     if (!userId) return;
 

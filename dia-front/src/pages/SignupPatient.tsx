@@ -1,12 +1,10 @@
 // dia-v2/src/pages/SignupPatient.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, ChevronLeft } from "lucide-react";
 import { CurvedHeader } from "@/components/dia/CurvedHeader";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { signupPatient } from "@/lib/api";
-
-
 
 const SignupPatient = () => {
   const navigate = useNavigate();
@@ -20,6 +18,10 @@ const SignupPatient = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+
+  const handleBack = () => {
+    navigate(-1);
+  };
 
   const handleNext = async () => {
     const { glucoseChecks, bolusInsulin, basalInsulin } = formData;
@@ -55,11 +57,9 @@ const SignupPatient = () => {
         basalInsulin: formData.basalInsulin,
       });
 
-      // salva token + usuário logado
       localStorage.setItem("token", res.accessToken);
       localStorage.setItem("user", JSON.stringify(res.user));
 
-      // limpa dados temporários do cadastro
       sessionStorage.removeItem("signupBasic");
       sessionStorage.removeItem("signupStep");
 
@@ -233,6 +233,14 @@ const SignupPatient = () => {
                   </div>
                 </div>
               </div>
+
+              <button
+                onClick={handleBack}
+                aria-label="Voltar"
+                className="absolute bottom-4 left-6 w-10 h-10 rounded-full bg-accent flex items-center justify-center shadow-elevated hover:shadow-soft transition-smooth"
+              >
+                <ChevronLeft className="w-4 h-4 text-white" />
+              </button>
 
               <button
                 onClick={handleNext}

@@ -1,6 +1,7 @@
+// src/pages/SignupDoctor.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, ChevronLeft } from "lucide-react";
 import { CurvedHeader } from "@/components/dia/CurvedHeader";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { AppTextField } from "@/components/dia/AppTextField";
@@ -10,9 +11,13 @@ const SignupDoctor = () => {
   const [specialty, setSpecialty] = useState("");
   const [crm, setCrm] = useState("");
 
+  const handleBack = () => {
+    navigate(-1);
+  };
+
   const handleNext = () => {
     if (specialty && crm) {
-      navigate("/home-patient"); // TODO: trocar para home do médico depois
+      navigate("/doctor"); 
     }
   };
 
@@ -72,6 +77,14 @@ const SignupDoctor = () => {
                   />
                 </div>
               </div>
+
+              <button
+                onClick={handleBack}
+                aria-label="Voltar"
+                className="absolute bottom-4 left-6 w-10 h-10 gradient-primary rounded-full grid place-items-center shadow-elevated hover:shadow-soft transition-smooth"
+              >
+                <ChevronLeft className="w-4 h-4 text-white" />
+              </button>
 
               <button
                 onClick={handleNext}
