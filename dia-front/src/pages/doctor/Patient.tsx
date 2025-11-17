@@ -527,4 +527,5 @@ const LegendItem = ({
     </div>
     <span>{label}</span>
   </div>
+  
 );

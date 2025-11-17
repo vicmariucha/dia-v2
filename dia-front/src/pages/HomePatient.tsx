@@ -1,5 +1,5 @@
 // dia-front/src/pages/HomePatient.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   TrendingUp,
@@ -7,6 +7,7 @@ import {
   Droplet,
   UtensilsCrossed,
   Dumbbell,
+  Calculator,
 } from "lucide-react";
 import { InfoCard } from "@/components/dia/InfoCard";
 import { BottomNav } from "@/components/dia/BottomNav";
@@ -192,6 +193,11 @@ const HomePatient = () => {
   const [sparkValues, setSparkValues] = useState<number[]>([]);
   const [avgGlucose, setAvgGlucose] = useState<number | null>(null);
 
+  // carrossel (dica do dia / calculadora)
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
+  const slideCount = 2;
+
   const tabs: { id: TabId; label: string }[] = [
     { id: "glucose", label: "Glicemia" },
     { id: "insulin", label: "Insulina" },
@@ -199,7 +205,6 @@ const HomePatient = () => {
     { id: "activity", label: "Atividade" },
   ];
 
-  // pega userId do localStorage
   const userId = useMemo(() => {
     try {
       const stored = localStorage.getItem("user");
@@ -216,7 +221,6 @@ const HomePatient = () => {
 
     const fetchData = async () => {
       try {
-        // pega tudo em paralelo
         const [glucose, doses, meals, activities] = await Promise.all([
           listGlucose(userId),
           listInsulin(userId, 10),
@@ -224,7 +228,6 @@ const HomePatient = () => {
           listActivities(userId, 10),
         ]);
 
-        // ---------- GLICEMIA ----------
         const sortedGlucose = [...glucose].sort(
           (a, b) =>
             new Date(b.measuredAt).getTime() -
@@ -232,7 +235,6 @@ const HomePatient = () => {
         );
         setGlucoseData(sortedGlucose);
 
-        // série e média das últimas 24h
         const now = Date.now();
         const last24h = sortedGlucose.filter(
           (g) =>
@@ -249,7 +251,6 @@ const HomePatient = () => {
           setAvgGlucose(null);
         }
 
-        // ---------- INSULINA ----------
         const mappedInsulin: InsulinListItem[] = doses
           .sort(
             (a, b) =>
@@ -268,7 +269,6 @@ const HomePatient = () => {
 
         setInsulinData(mappedInsulin);
 
-        // ---------- ALIMENTAÇÃO ----------
         const mappedMeals: FoodListItem[] = (meals as Meal[])
           .sort(
             (a, b) =>
@@ -287,7 +287,6 @@ const HomePatient = () => {
 
         setFoodData(mappedMeals);
 
-        // ---------- ATIVIDADE ----------
         const mappedActivities: ActivityListItem[] = (
           activities as ActivityRecord[]
         )
@@ -480,6 +479,26 @@ const HomePatient = () => {
   const avgLabel =
     avgGlucose !== null ? `${Math.round(avgGlucose)}mg/dl` : "--";
 
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current == null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    const threshold = 40;
+
+    if (Math.abs(delta) > threshold) {
+      if (delta < 0 && carouselIndex < slideCount - 1) {
+        setCarouselIndex((prev) => prev + 1);
+      } else if (delta > 0 && carouselIndex > 0) {
+        setCarouselIndex((prev) => prev - 1);
+      }
+    }
+
+    touchStartX.current = null;
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <div className="gradient-primary pt-12 pb-8 px-6">
@@ -535,23 +554,83 @@ const HomePatient = () => {
           </div>
         </InfoCard>
 
-        <InfoCard className="bg-accent/5 border border-accent/20">
-          <div className="flex gap-3">
-            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
-              <Clock className="text-accent" size={20} />
-            </div>
-            <div>
-              <h3 className="font-medium text-foreground mb-1">
-                Dica do dia
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Lembre-se de registrar suas medições e doses de
-                insulina logo após realizar, para manter seu histórico
-                sempre atualizado.
-              </p>
+        {/* Carrossel: Dica do dia / Calculadora de bolus */}
+        <div className="relative">
+          <div
+            className="overflow-hidden rounded-3xl"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div
+              className="flex transition-transform duration-300 ease-out"
+              style={{
+                width: "200%", // 2 slides
+                transform: `translateX(-${carouselIndex * 50}%)`, // cada slide = 50%
+              }}
+            >
+              {/* Slide 1 – Dica do dia */}
+              <div className="w-1/2 flex-shrink-0 px-0">
+                <InfoCard className="bg-accent/5 border border-accent/20">
+                  <div className="flex gap-3">
+                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
+                      <Clock className="text-accent" size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-foreground mb-1">
+                        Dica do dia
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Lembre-se de registrar suas medições e doses de
+                        insulina logo após realizar, para manter seu
+                        histórico sempre atualizado.
+                      </p>
+                    </div>
+                  </div>
+                </InfoCard>
+              </div>
+
+              {/* Slide 2 – Atalho para calculadora */}
+              <div className="w-1/2 flex-shrink-0 px-0">
+                <InfoCard
+                  onClick={() => navigate("/carb-calculator")}
+                  className="cursor-pointer bg-primary/5 border border-primary/30 hover:border-primary/60 transition-smooth"
+                >
+                  <div className="flex gap-3 items-center">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                      <Calculator className="text-accent" size={20} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-foreground mb-1">
+                        Calculadora de bolus
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Estime a dose de insulina a partir dos carboidratos
+                        da refeição e da sua glicemia atual.
+                      </p>
+                    </div>
+                  </div>
+                </InfoCard>
+              </div>
             </div>
           </div>
-        </InfoCard>
+
+          {/* Indicadores do carrossel */}
+          <div className="flex justify-center mt-2 gap-1.5">
+            {[0, 1].map((i) => (
+              <button
+                key={i}
+                className={`h-1.5 rounded-full transition-smooth ${
+                  carouselIndex === i
+                    ? "w-4 bg-accent"
+                    : "w-2 bg-muted-foreground/40"
+                }`}
+                onClick={() => setCarouselIndex(i)}
+                aria-label={`Ir para slide ${i + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+
 
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {tabs.map((tab) => (

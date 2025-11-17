@@ -99,8 +99,7 @@ export default function DoctorDashboard() {
             </InfoCard>
           ))}
       </div>
-          <DoctorBottomNav />
-
+      <DoctorBottomNav />
     </div>
   );
 }

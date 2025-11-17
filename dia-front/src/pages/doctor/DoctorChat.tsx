@@ -1,25 +1,26 @@
+// src/pages/doctor/DoctorChat.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Send, Stethoscope } from "lucide-react";
-import { BottomNav } from "@/components/dia/BottomNav";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Send, User as UserIcon } from "lucide-react";
+import DoctorBottomNav from "@/components/dia/DoctorBottomNav";
 
 type Message = {
   id: string;
-  from: "me" | "doctor";
+  from: "me" | "patient";
   text: string;
   timestamp: number;
 };
 
-type Doctor = {
+type Patient = {
   id: string;
   name: string;
-  specialty: string;
-  photoUrl?: string;
+  avatarUrl?: string;
 };
 
-const doctors: Record<string, Doctor> = {
-  "1": { id: "1", name: "Dra. Ana Beatriz", specialty: "Endocrinologista", photoUrl: "https://i.pravatar.cc/120?img=47" },
-  "2": { id: "2", name: "Dr. Carlos Eduardo", specialty: "Clínico Geral", photoUrl: "https://i.pravatar.cc/120?img=12" },
+const mockPatient: Patient = {
+  id: "p1",
+  name: "João Silva",
+  avatarUrl: "https://i.pravatar.cc/120?img=32",
 };
 
 const formatTime = (t: number) => {
@@ -27,38 +28,57 @@ const formatTime = (t: number) => {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
-const PatientDoctorChat = () => {
+const DoctorChat = () => {
   const navigate = useNavigate();
-  const { id } = useParams();
-  const doctor = useMemo<Doctor | undefined>(() => (id ? doctors[id] : undefined), [id]);
+  const patient = mockPatient;
 
   const [messages, setMessages] = useState<Message[]>([
-    { id: "m1", from: "doctor", text: "Olá! Como você está hoje?", timestamp: Date.now() - 1000 * 60 * 60 },
-    { id: "m2", from: "me", text: "Oi, doutora! Estou bem, medi 110 mg/dL pela manhã.", timestamp: Date.now() - 1000 * 60 * 55 },
-    { id: "m3", from: "doctor", text: "Ótimo! Siga com a rotina e me avise se tiver sintomas.", timestamp: Date.now() - 1000 * 60 * 50 },
+    {
+      id: "m1",
+      from: "patient",
+      text: "Olá, doutor(a)! Meus níveis de glicemia têm variado bastante.",
+      timestamp: Date.now() - 1000 * 60 * 60,
+    },
+    {
+      id: "m2",
+      from: "me",
+      text: "Olá, João! Você anotou os horários e valores das últimas medições?",
+      timestamp: Date.now() - 1000 * 60 * 55,
+    },
+    {
+      id: "m3",
+      from: "patient",
+      text: "Sim, medi 95 em jejum e 180 após o almoço.",
+      timestamp: Date.now() - 1000 * 60 * 50,
+    },
   ]);
   const [input, setInput] = useState("");
-  const [keyboardOffset, setKeyboardOffset] = useState(0); // px extra quando teclado estiver aberto
+  const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // rolar pro fim ao mudar mensagens
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
 
-  // ajustar quando teclado móvel abrir (visualViewport)
   useEffect(() => {
     const vv = (window as any).visualViewport as VisualViewport | undefined;
     if (!vv) return;
 
     const handleResize = () => {
-      // se a altura visual diminuir, teclado provavelmente abriu.
-      const bottomInset = Math.max(0, (window.innerHeight - vv.height - vv.offsetTop) || 0);
+      const bottomInset = Math.max(
+        0,
+        (window.innerHeight - vv.height - vv.offsetTop) || 0,
+      );
       setKeyboardOffset(bottomInset);
-      // manter mensagens visíveis
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
     };
 
     vv.addEventListener("resize", handleResize);
@@ -71,36 +91,37 @@ const PatientDoctorChat = () => {
     };
   }, []);
 
-  if (!doctor) {
-    return (
-      <div className="min-h-screen bg-background grid place-items-center p-6">
-        <p className="text-sm text-muted-foreground">Médico não encontrado.</p>
-      </div>
-    );
-    }
-
-  const initials = doctor.name
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const initials = useMemo(
+    () =>
+      patient.name
+        .split(" ")
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase(),
+    [patient.name],
+  );
 
   const handleSend = () => {
     const text = input.trim();
     if (!text) return;
-    const newMsg: Message = { id: crypto.randomUUID(), from: "me", text, timestamp: Date.now() };
+
+    const newMsg: Message = {
+      id: crypto.randomUUID(),
+      from: "me",
+      text,
+      timestamp: Date.now(),
+    };
     setMessages((prev) => [...prev, newMsg]);
     setInput("");
 
-    // mock de resposta
     setTimeout(() => {
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
-          from: "doctor",
-          text: "Entendi. Obrigado por avisar! 👍",
+          from: "patient",
+          text: "Entendi, doutor(a). Vou acompanhar mais de perto.",
           timestamp: Date.now(),
         },
       ]);
@@ -116,6 +137,7 @@ const PatientDoctorChat = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Header */}
       <div className="gradient-primary pt-10 pb-4 px-4">
         <div className="max-w-md mx-auto flex items-center gap-3">
           <button
@@ -126,56 +148,77 @@ const PatientDoctorChat = () => {
             <ArrowLeft size={22} />
           </button>
 
-          {doctor.photoUrl ? (
-            <img src={doctor.photoUrl} alt={doctor.name} className="w-10 h-10 rounded-full object-cover" />
+          {patient.avatarUrl ? (
+            <img
+              src={patient.avatarUrl}
+              alt={patient.name}
+              className="w-10 h-10 rounded-full object-cover"
+            />
           ) : (
             <div className="w-10 h-10 rounded-full bg-white/20 grid place-items-center">
-              <span className="text-white text-xs font-semibold">{initials}</span>
+              <span className="text-white text-xs font-semibold">
+                {initials}
+              </span>
             </div>
           )}
 
           <div className="flex-1 min-w-0">
             <h1 className="text-base font-semibold text-white leading-tight truncate font-poppins">
-              {doctor.name}
+              {patient.name}
             </h1>
-            <p className="text-[12px] text-white/80 font-poppins truncate">{doctor.specialty}</p>
+            <p className="text-[12px] text-white/80 font-poppins truncate">
+              Paciente
+            </p>
           </div>
         </div>
       </div>
 
+      {/* Mensagens */}
       <div
         ref={scrollRef}
         className="max-w-md mx-auto px-4 pt-3 h-[calc(100vh-9rem)] overflow-y-auto"
-        // espaço para não esconder as últimas mensagens atrás do input
-        style={{ paddingBottom: `calc(${140}px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)` }}
+        style={{
+          paddingBottom: `calc(${140}px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)`,
+        }}
       >
         <div className="space-y-2">
           {messages.map((m) => {
             const mine = m.from === "me";
             return (
-              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                {!mine && (
-                  doctor.photoUrl ? (
+              <div
+                key={m.id}
+                className={`flex ${mine ? "justify-end" : "justify-start"}`}
+              >
+                {!mine &&
+                  (patient.avatarUrl ? (
                     <img
-                      src={doctor.photoUrl}
-                      alt={doctor.name}
+                      src={patient.avatarUrl}
+                      alt={patient.name}
                       className="w-8 h-8 rounded-full object-cover mr-2 self-end"
                     />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-accent/10 grid place-items-center mr-2 self-end">
-                      <Stethoscope className="text-accent" size={16} />
+                      <UserIcon className="text-accent" size={16} />
                     </div>
-                  )
-                )}
+                  ))}
 
                 <div
                   className={[
                     "max-w-[75%] rounded-2xl px-3 py-2",
-                    mine ? "bg-accent text-white" : "bg-card border border-border text-foreground",
+                    mine
+                      ? "bg-accent text-white"
+                      : "bg-card border border-border text-foreground",
                   ].join(" ")}
                 >
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{m.text}</p>
-                  <p className={["text-[10px] mt-1", mine ? "text-white/80" : "text-muted-foreground"].join(" ")}>
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                    {m.text}
+                  </p>
+                  <p
+                    className={[
+                      "text-[10px] mt-1",
+                      mine ? "text-white/80" : "text-muted-foreground",
+                    ].join(" ")}
+                  >
                     {formatTime(m.timestamp)}
                   </p>
                 </div>
@@ -185,10 +228,10 @@ const PatientDoctorChat = () => {
         </div>
       </div>
 
+      {/* Input */}
       <div
         className="fixed inset-x-0"
         style={{
-          // base acima da bottom nav (64px ~ h-16) + margem extra + teclado
           bottom: `calc(64px + 8px + env(safe-area-inset-bottom, 0px) + ${keyboardOffset}px)`,
         }}
       >
@@ -200,7 +243,6 @@ const PatientDoctorChat = () => {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder="Escreva sua mensagem..."
-              // Em mobile, o foco abre o teclado automaticamente
               inputMode="text"
               className="flex-1 bg-transparent outline-none text-sm px-2"
             />
@@ -216,9 +258,9 @@ const PatientDoctorChat = () => {
         </div>
       </div>
 
-      <BottomNav />
+      <DoctorBottomNav />
     </div>
   );
 };
 
-export default PatientDoctorChat;
+export default DoctorChat;
